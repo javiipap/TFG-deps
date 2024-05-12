@@ -1,5 +1,3 @@
-use std::u64::MAX;
-
 use elastic_elgamal::app::{ChoiceParams, EncryptedChoice, SingleChoice};
 use elastic_elgamal::group::Ristretto;
 use elastic_elgamal::{Ciphertext, DiscreteLogTable, Keypair, PublicKey, SecretKey};
@@ -68,7 +66,9 @@ pub fn decrypt_result(secret_key: Vec<u8>, raw_result: String) -> Result<Vec<u64
         None => return Err("Unexpected error".to_string()),
     };
 
-    let lookup_table = DiscreteLogTable::new(0..=100);
+    let max: u64 = 1 << 26;
+
+    let lookup_table = DiscreteLogTable::new(0..=max);
 
     Ok(result
         .iter()
