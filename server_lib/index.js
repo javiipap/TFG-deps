@@ -310,11 +310,14 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { encryptVote, eccEncrypt, eccDecrypt, generateRsaKeypair, sign, verify } = nativeBinding
+const { generateElgamalKeypair, encryptVote, eccEncrypt, eccDecrypt, createRequest, generateRsaKeypair, sign, unblind, verify } = nativeBinding
 
+module.exports.generateElgamalKeypair = generateElgamalKeypair
 module.exports.encryptVote = encryptVote
 module.exports.eccEncrypt = eccEncrypt
 module.exports.eccDecrypt = eccDecrypt
+module.exports.createRequest = createRequest
 module.exports.generateRsaKeypair = generateRsaKeypair
 module.exports.sign = sign
+module.exports.unblind = unblind
 module.exports.verify = verify

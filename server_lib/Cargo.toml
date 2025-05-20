@@ -8,14 +8,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
+primitives = { path = "../primitives" }
 napi = { version = "2.12.2", default-features = false, features = ["napi4"] }
 napi-derive = "2.12.2"
-rand = "0.8.5"
-elastic-elgamal = { version = "0.3.0", features = ["serde"] }
-serde_json = "1.0.115"
-blind-rsa-signatures = "0.15.0"
-ecies = {version = "0.2.6", default-features= false, features = ["pure"]}
-once_cell = {version = "1.18.0", default-features = false, features = ["std"]}
+alloy-primitives = "1.1.0"
+alloy-sol-types = "1.1.0"
 
 [build-dependencies]
 napi-build = "2.0.1"

@@ -1,25 +1,19 @@
-use rsa::{pkcs8::DecodePublicKey, sha2::Sha256, Pkcs1v15Encrypt, Pkcs1v15Sign, RsaPublicKey};
+use crate::errors::JsError;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn rsa_encrypt(pem: String, msg: String) -> Box<[u8]> {
-    let mut rng = rand::thread_rng();
-    let public_key = RsaPublicKey::from_public_key_pem(&pem).unwrap();
-
-    public_key
-        .encrypt(&mut rng, Pkcs1v15Encrypt, msg.as_bytes())
-        .unwrap()
-        .into_boxed_slice()
+pub fn rsa_encrypt(public_key: Vec<u8>, msg: Vec<u8>) -> Result<Vec<u8>, JsError> {
+    Ok(primitives::signatures::rsa_encrypt(public_key, msg)?)
 }
 
 #[wasm_bindgen]
-pub fn rsa_verify(pem: String, signature: Box<[u8]>, hash: Box<[u8]>) -> bool {
-    let public_key = RsaPublicKey::from_public_key_pem(&pem).unwrap();
+pub fn rsa_verify(private_key: Vec<u8>, signature: Vec<u8>, hash: Vec<u8>) -> Result<(), JsError> {
+    primitives::signatures::rsa_verify(private_key, signature, hash)?;
 
-    let scheme = Pkcs1v15Sign::new::<Sha256>();
+    Ok(())
+}
 
-    match public_key.verify(scheme, &hash, &signature) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+#[wasm_bindgen]
+pub fn rsa_decrypt(private_key: Vec<u8>, ecnrypted: Vec<u8>) -> Result<Vec<u8>, JsError> {
+    Ok(primitives::signatures::rsa_decrypt(private_key, ecnrypted)?)
 }

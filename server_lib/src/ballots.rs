@@ -1,17 +1,26 @@
-use elastic_elgamal::app::{ChoiceParams, EncryptedChoice};
-use elastic_elgamal::group::Ristretto;
-use elastic_elgamal::PublicKey;
-use napi::bindgen_prelude::*;
+use napi::bindgen_prelude::Buffer;
+use napi::{Error, Result};
 use napi_derive::napi;
-use rand::thread_rng;
-use serde_json;
+
+use crate::ExportedKeyPair;
 
 #[napi]
-pub fn encrypt_vote(pub_key_bytes: Buffer, choice: u32, options_count: u32) -> String {
-  let rng = &mut thread_rng();
-  let receiver = PublicKey::<Ristretto>::from_bytes(&pub_key_bytes).unwrap();
-  let params = ChoiceParams::single(receiver, options_count.try_into().unwrap());
-  let ballot = EncryptedChoice::single(&params, choice.try_into().unwrap(), rng);
+pub fn generate_elgamal_keypair() -> Result<ExportedKeyPair> {
+  let keypair = primitives::ballots::generate_elgamal_keypair();
 
-  serde_json::to_string(&ballot).unwrap()
+  Ok(ExportedKeyPair {
+    public: keypair.0.into(),
+    private: keypair.1.into(),
+  })
+}
+
+#[napi]
+pub fn encrypt_vote(pub_key_bytes: Buffer, choice: u32, options_count: u32) -> Result<Buffer> {
+  primitives::ballots::encrypt_vote(
+    &pub_key_bytes.into(),
+    choice as usize,
+    options_count as usize,
+  )
+  .map(Into::into)
+  .map_err(|e| Error::from_reason(e.to_string()))
 }

@@ -2,15 +2,11 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 
-pub fn ecc_encrypt(pk: Box<[u8]>, msg: Box<[u8]>) -> Box<[u8]> {
-    let encrypted = ecies::encrypt(&pk, &msg).unwrap();
-
-    encrypted.into_boxed_slice()
+pub fn ecc_encrypt(pk: Vec<u8>, msg: Vec<u8>) -> Vec<u8> {
+    primitives::ecc::ecc_encrypt(pk, msg).unwrap()
 }
 #[wasm_bindgen]
 
-pub fn ecc_decrypt(sk: Box<[u8]>, encrypted: Box<[u8]>) -> Box<[u8]> {
-    let decrypted = ecies::decrypt(&sk, &encrypted).unwrap();
-
-    decrypted.into_boxed_slice()
+pub fn ecc_decrypt(sk: Vec<u8>, encrypted: Vec<u8>) -> Vec<u8> {
+    primitives::ecc::ecc_decrypt(sk, encrypted).unwrap()
 }
