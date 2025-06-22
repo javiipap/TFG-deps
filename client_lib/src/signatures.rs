@@ -7,8 +7,8 @@ pub fn rsa_encrypt(public_key: Vec<u8>, msg: Vec<u8>) -> Result<Vec<u8>, JsError
 }
 
 #[wasm_bindgen]
-pub fn rsa_verify(private_key: Vec<u8>, signature: Vec<u8>, hash: Vec<u8>) -> Result<(), JsError> {
-    primitives::signatures::rsa_verify(private_key, signature, hash)?;
+pub fn rsa_verify(public_key: Vec<u8>, signature: Vec<u8>, hash: Vec<u8>) -> Result<(), JsError> {
+    primitives::signatures::rsa_verify(public_key, hash, signature)?;
 
     Ok(())
 }
