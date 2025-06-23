@@ -2,12 +2,11 @@ use blind_rsa_signatures::KeyPair;
 use rand::thread_rng;
 use rsa::RsaPrivateKey;
 use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};
-use rsa::pkcs8::DecodePrivateKey;
-use rsa::sha2::{Digest, Sha256};
+use rsa::sha2::Sha256;
 use rsa::signature::{SignatureEncoding, Verifier};
 use rsa::{
-    Pkcs1v15Encrypt, Pkcs1v15Sign, RsaPublicKey, pkcs1::DecodeRsaPrivateKey,
-    pkcs8::DecodePublicKey, signature::SignerMut,
+    Pkcs1v15Encrypt, RsaPublicKey, pkcs1::DecodeRsaPrivateKey, pkcs8::DecodePublicKey,
+    signature::SignerMut,
 };
 use std::error::Error;
 
@@ -22,8 +21,13 @@ pub fn generate_rsa_keypair() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
 pub fn rsa_encrypt(public_key: Vec<u8>, msg: Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut rng = rand::thread_rng();
     let public_key = RsaPublicKey::from_public_key_der(&public_key)?;
-
     Ok(public_key.encrypt(&mut rng, Pkcs1v15Encrypt, &msg)?)
+}
+
+pub fn rsa_decrypt(private_key: Vec<u8>, ecnrypted: Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
+    let secret_key = RsaPrivateKey::from_pkcs1_der(&private_key)?;
+
+    Ok(secret_key.decrypt(Pkcs1v15Encrypt, &ecnrypted)?)
 }
 
 pub fn rsa_sign(private_key: Vec<u8>, msg: Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -47,12 +51,6 @@ pub fn rsa_verify(
     verifying_key.verify(msg.as_slice(), &decoded)?;
 
     Ok(())
-}
-
-pub fn rsa_decrypt(private_key: Vec<u8>, ecnrypted: Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
-    let secret_key = RsaPrivateKey::from_pkcs1_der(&private_key)?;
-
-    Ok(secret_key.decrypt(Pkcs1v15Encrypt, &ecnrypted)?)
 }
 
 #[test]
