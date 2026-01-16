@@ -1,0 +1,30 @@
+---
+#
+# tasks file for formatting /dev/sdb for Longhorn
+#
+- name: Login to IaaS
+  ovirt_auth:
+    url: https://iaas.ull.es/ovirt-engine/api
+    insecure: yes
+    username: '{{ ovirt_login }}'
+    password: '{{ ovirt_passwd }}'
+    headers:
+      filter: true
+
+- name: Create and attach disk
+  ovirt_disk:
+    auth: '{{ ovirt_auth }}'
+    name: '{{ prefix }}-{{ item }}_data'
+    vm_name: '{{ prefix }}-{{ item }}'
+    interface: virtio
+    size: 10 GiB
+    storage_domain: pv01-005
+    wait: true
+    state: present
+  with_items: '{{ nodes }}'
+  ignore_errors: true
+
+- name: Cleanup IaaS auth token
+  ovirt_auth:
+    ovirt_auth: '{{ ovirt_auth }}'
+    state: absent

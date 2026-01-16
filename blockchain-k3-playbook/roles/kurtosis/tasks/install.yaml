@@ -1,0 +1,11 @@
+- name: Add specified repository into sources list
+  ansible.builtin.apt_repository:
+    repo: deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /
+    state: present
+    filename: kurtosis.list
+
+- name: Install apt packages
+  apt:
+    pkg:
+      - kurtosis-cli
+    update_cache: true

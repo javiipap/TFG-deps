@@ -1,0 +1,9 @@
+config-version: 2
+should-send-metrics: true
+kurtosis-clusters:
+  cloud:
+    type: 'kubernetes'
+    config:
+      kubernetes-cluster-name: 'NAME-OF-YOUR-CLUSTER'
+      storage-class: 'local-path'
+      enclave-size-in-megabytes: 10

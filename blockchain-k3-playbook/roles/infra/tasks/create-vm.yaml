@@ -1,0 +1,75 @@
+#
+# Playbook para creación desatendida de MVs ubuntu22.04 en IAAS
+#
+---
+- name: Login to IaaS
+  ovirt_auth:
+    url: https://iaas.ull.es/ovirt-engine/api
+    insecure: yes
+    username: '{{ ovirt_login }}'
+    password: '{{ ovirt_passwd }}'
+    headers:
+      filter: true
+
+- name: Create a VM
+  ovirt_vm:
+    auth: '{{ ovirt_auth }}'
+    cluster: Cluster-Rojo
+    name: '{{ prefix }}-{{ item }}'
+    cpu_cores: 4
+    cpu_sockets: 1
+    memory: 8GiB
+    template: ubuntu-2204-sinred-cloudinit
+    storage_domain: pv02-007 # No hace caso
+    nics: '{{ node_nics }}'
+    state: present
+    wait: true
+  with_items: '{{ nodes }}'
+
+- name: Update VM via cloud-init
+  ovirt_vm:
+    auth: '{{ ovirt_auth }}'
+    name: '{{ prefix }}-{{ item }}'
+    state: running
+    cloud_init:
+      host_name: '{{ fqdn_prefix }}-{{ item }}'
+      user_name: ansible
+      root_password: '{{ ansible_passwd }}'
+      authorized_ssh_keys: '{{ ansible_ssh_key }}'
+      custom_script: |
+        write_files:
+          - path: /etc/sudoers.d/ansible
+            permissions: '0644'
+            content: |
+              ansible ALL=(ALL:ALL) NOPASSWD:ALL
+          - path: /etc/netplan/50-base-config.yaml
+            permissions: '0644'
+            content: |
+              network:
+                version: 2
+                ethernets:
+                  ens3:
+                    dhcp4: true
+                    dhcp-identifier: mac
+        runcmd:
+          - rm /etc/netplan/00-installer-config.yaml
+          - sed -i '/AllowUsers/c\AllowUsers ansible' /etc/ssh/sshd_config
+          - systemctl restart sshd
+          - systemctl stop unattended-upgrades
+          - apt remove unattended-upgrades
+          - netplan apply
+    wait: true
+  with_items: '{{ nodes }}'
+
+- name: Setup Known Hosts
+  known_hosts:
+    key: "{{ lookup('pipe', 'ssh-keyscan -t ed25519 ' + item) }}"
+    name: '{{ item }}'
+    path: '/home/ansible/.ssh/known_hosts'
+    state: present
+  with_inventory_hostnames: 'tfg_k3s_cluster'
+
+- name: Cleanup IaaS auth token
+  ovirt_auth:
+    ovirt_auth: '{{ ovirt_auth }}'
+    state: absent

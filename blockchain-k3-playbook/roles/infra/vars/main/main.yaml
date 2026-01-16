@@ -1,0 +1,17 @@
+---
+ovirt_login: alu0101410463@ULL
+
+prefix: ID-E08J-K3S
+fqdn_prefix: TFG-K3S
+
+node_nics:
+  - name: nic1
+    profile_name: DOCP2P-4016
+
+nodes:
+  - morcilla
+  - salami
+  - mortadela
+
+ansible_ssh_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOShpv/6q8u+S7dNfT0uHDfIPlTXPijSUm80+SE+Bq1G root@ID-E08J-ANSIBLE
+ansible_passwd: $6$xyz$ULaA0fNRd0.Obukr7MmJqPUzGCQljFDtTpkLce4U5cPJOX3McjbmIE6Z3No/ltOKL1weZlgu0jJiEqrfeTbi31

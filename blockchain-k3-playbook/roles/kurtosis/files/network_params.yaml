@@ -1,0 +1,27 @@
+participants:
+  - el_type: geth
+    cl_type: lighthouse
+    count: 3
+
+network_params:
+  network_id: '123454321'
+
+additional_services:
+  - dora
+  - prometheus_grafana
+
+port_publisher:
+  nat_exit_ip: 10.6.128.111
+
+  el:
+    enabled: true
+    public_port_start: 32000
+  vc:
+    enabled: true
+    public_port_start: 34000
+  remote_signer:
+    enabled: true
+    public_port_start: 25000
+  additional_services:
+    enabled: true
+    public_port_start: 36000

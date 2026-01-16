@@ -1,0 +1,5 @@
+- name: Install kurtosis
+  hosts: server
+  become: true
+  roles:
+    - kurtosis

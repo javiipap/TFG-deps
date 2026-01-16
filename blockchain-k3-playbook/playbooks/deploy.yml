@@ -1,0 +1,13 @@
+---
+- name: Deploy a cluster of VMs
+  hosts: localhost
+
+  roles:
+    - infra
+
+- name: Configure and update cluster
+  hosts: tfg_k3s_cluster
+  become: true
+
+  roles:
+    - config

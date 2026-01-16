@@ -1,0 +1,35 @@
+---
+- name: Create admin group
+  group:
+    name: admin
+
+- name: Add admin group to sudoers
+  community.general.sudoers:
+    name: admin
+    group: admin
+    commands: ALL
+
+- name: Create user
+  user:
+    name: "{{ alu_username }}"
+    password: "{{ alu_passwd }}"
+    shell: /bin/bash
+    groups: admin
+
+- name: Append ssh key
+  ansible.posix.authorized_key:
+    user: "{{ alu_username }}"
+    key: "{{ alu_ssh_key }}"
+
+- name: Check if user is authorized to remote login
+  shell: "grep 'AllowUsers.*{{ alu_username }}' /etc/ssh/sshd_config"
+  register: is_authorized
+  failed_when: false
+
+- name: Authorize ssh connection
+  command: "sed -i 's/AllowUsers/AllowUsers {{ alu_username }}/g' /etc/ssh/sshd_config"
+  when: is_authorized.rc != 0
+
+- name: Restart ssh server
+  command: systemctl restart sshd
+  when: is_authorized.rc != 0
