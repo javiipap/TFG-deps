@@ -3,3 +3,7 @@
 # Compiled libraries
 
 This repository contains all compiled dependencies used by either the web client, blockchain or server.
+
+## Prerequisites
+
+Inside this workspace run `./build.sh <out_dir>`. The default out_dir is `../web/src/lib/pkg` which is the exptected by the web server.

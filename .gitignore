@@ -1,3 +1,6 @@
 target
 pkg
 venv
+*/out/*
+venv
+*.csv

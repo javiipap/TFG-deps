@@ -108,7 +108,7 @@ pub fn decrypt_result(
         None => return Err(Box::from("Unexpected error")),
     };
 
-    let max: u64 = 1 << 24;
+    let max: u64 = 1 << 5;
 
     let lookup_table = DiscreteLogTable::new(0..=max);
 

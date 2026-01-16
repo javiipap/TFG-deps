@@ -14,3 +14,4 @@ rand = "0.8.5"
 rsa = { version = "0.9.8", features = ["sha2"]}
 getrandom = { version = "0.2", features = ["js"] }
 once_cell = {version = "1.18.0", default-features = false, features = ["std"]}
+sharks = "0.5.0"

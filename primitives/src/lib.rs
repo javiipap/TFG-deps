@@ -5,3 +5,5 @@ pub mod ecc;
 pub mod signatures;
 
 pub mod ballots;
+
+pub mod secret_sharing;
