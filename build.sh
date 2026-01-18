@@ -19,6 +19,38 @@ log_success() {
     echo -e "✅ Éxito: $1"
 }
 
+if [ "$#" -lt 2 ]; then
+    log_info "Uso: $0 <tipo_libreria> <out_dir>"
+    log_info "Tipos de libreria disponibles: glib, musl"
+    exit 1
+fi
+
+# --- Configuración Inicial ---
+DEFAULT_DIR="../web/src/lib/pkg"
+TARGET_DIR="" # Usaremos esta variable para el directorio final
+NODE_FILE="server_utilities.linux-x64-gnu.node"
+
+if [ "$1" == "musl" ]; then
+    NODE_FILE="server_utilities.linux-x64-musl.node"
+    log_info "Configurado para compilar con: musl"
+elif [ "$1" == "glib" ]; then
+    NODE_FILE="server_utilities.linux-x64-gnu.node"
+    log_info "Configurado para compilar con: glib (GNU)"
+else
+    log_info "Error: Tipo de librería no válido. Usa 'glib' o 'musl'."
+    exit 1
+fi
+
+
+# --- Procesamiento de Argumentos ---
+if [ -n "$2" ]; then
+    TARGET_DIR="$2"
+    log_info "Directorio de destino especificado: $TARGET_DIR"
+else
+    TARGET_DIR="$DEFAULT_DIR"
+    log_info "No se especificó un directorio de destino. Usando el predeterminado: $TARGET_DIR"
+fi
+
 # --- Función de Spinner de Carga ---
 
 _spinner_pid=""
@@ -72,7 +104,7 @@ trap cleanup_on_interrupt SIGINT
 modify_server_index_js() {
     local index_file="$1"
     local start_pattern="const { generateElgamalKeypair, encryptVote, eccEncrypt, eccDecrypt, createRequest, generateRsaKeypair, sign, unblind, verify } = nativeBinding"
-    local new_header="const nativeBinding = require('./server_utilities.linux-x64-gnu.node');\nif (!nativeBinding) {\n  throw Error(\"Couldn't load binary lib\");\n}"
+    local new_header="const nativeBinding = require('./$NODE_FILE');\nif (!nativeBinding) {\n  throw Error(\"Couldn't load binary lib\");\n}"
 
     log_info "Modificando '$index_file' para simplificar la carga del binding nativo..."
 
@@ -102,20 +134,6 @@ modify_server_index_js() {
     mv "${index_file}.tmp" "$index_file" || exit_on_error "Fallo al renombrar el archivo temporal a '$index_file'."
     log_success "'$index_file' modificado exitosamente."
 }
-
-
-# --- Configuración Inicial ---
-DEFAULT_DIR="../web/src/lib/pkg"
-TARGET_DIR="" # Usaremos esta variable para el directorio final
-
-# --- Procesamiento de Argumentos ---
-if [ -n "$1" ]; then
-    TARGET_DIR="$1"
-    log_info "Directorio de destino especificado: $TARGET_DIR"
-else
-    TARGET_DIR="$DEFAULT_DIR"
-    log_info "No se especificó un directorio de destino. Usando el predeterminado: $TARGET_DIR"
-fi
 
 # --- Validación del Directorio de Destino ---
 PARENT_DIR=$(dirname "$TARGET_DIR")
@@ -168,10 +186,10 @@ log_info "Copiando librerías al entorno de desarrollo..."
 SERVER_SOURCE_DIR="server_lib"
 SERVER_DEST_DIR="$TARGET_DIR/server_utilities"
 
-# Copiar todos los archivos excepto server_utilities.linux-x64-gnu.node
+# Copiar todos los archivos excepto server_utilities.linux-x64-{BUILD}.node
 # (ya que este es el que se carga directamente ahora)
 # De hecho, según tu instrucción previa, solo quieres copiar los listados:
-cp "$SERVER_SOURCE_DIR/server_utilities.linux-x64-gnu.node" "$SERVER_DEST_DIR/" || exit_on_error "Fallo al copiar 'server_utilities.linux-x64-gnu.node'."
+cp "$SERVER_SOURCE_DIR/$NODE_FILE" "$SERVER_DEST_DIR/" || exit_on_error "Fallo al copiar '$NODE_FILE'."
 cp "$SERVER_SOURCE_DIR/index.d.ts" "$SERVER_DEST_DIR/" || exit_on_error "Fallo al copiar 'index.d.ts'."
 cp "$SERVER_SOURCE_DIR/index.js" "$SERVER_DEST_DIR/" || exit_on_error "Fallo al copiar 'index.js'."
 cp "$SERVER_SOURCE_DIR/package.json" "$SERVER_DEST_DIR/" || exit_on_error "Fallo al copiar 'package.json'."
