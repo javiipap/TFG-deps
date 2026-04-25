@@ -2,15 +2,20 @@
 name = "blind_signatures"
 version = "0.1.0"
 edition = "2021"
+wasm-opt = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wasm-bindgen = "0.2.92"
+wasm-bindgen = "0.2.108"
 primitives = { path = "../primitives" }
-alloy-primitives = "1.1.0"
-alloy-sol-types = "1.1.0"
-js-sys = "0.3.77"
+js-sys = "0.3.85"
+
+[dev-dependencies]
+ecies = { version = "0.2.10", default-features= false, features = ["pure"] }
+alloy-sol-types = "1.5.3"
+alloy-primitives = "1.5.3"
+hex = "0.4.3"
