@@ -169,7 +169,7 @@ log_success "Librería del cliente compilada."
 # Compilar librería para el servidor
 start_spinner "Compilando librería para el servidor (Node.js)..."
 cd server_lib || { stop_spinner; exit_on_error "No se pudo cambiar al directorio 'server_lib'."; }
-yarn build || { stop_spinner; exit_on_error "Fallo al compilar 'server_lib' con Yarn. Asegúrate de que Yarn y las dependencias estén instaladas."; }
+yarn install && yarn build || { stop_spinner; exit_on_error "Fallo al compilar 'server_lib' con Yarn. Asegúrate de que Yarn y las dependencias estén instaladas."; }
 
 # --- Llamada a la nueva función para modificar index.js ---
 modify_server_index_js "index.js" # Modifica el index.js recién compilado
