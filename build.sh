@@ -103,7 +103,7 @@ trap cleanup_on_interrupt SIGINT
 # Modifica el archivo index.js para simplificar la carga del binding nativo
 modify_server_index_js() {
     local index_file="$1"
-    local start_pattern="const { generateElgamalKeypair, encryptVote, eccEncrypt, eccDecrypt, createRequest, generateRsaKeypair, sign, unblind, verify } = nativeBinding"
+    local start_pattern="^module[.]exports"
     local new_header="const nativeBinding = require('./$NODE_FILE');\nif (!nativeBinding) {\n  throw Error(\"Couldn't load binary lib\");\n}"
 
     log_info "Modificando '$index_file' para simplificar la carga del binding nativo..."
