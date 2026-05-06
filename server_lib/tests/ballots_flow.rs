@@ -7,6 +7,18 @@ use server_utilities::ballots::{
 use server_utilities::ExportedKeyPair;
 
 #[test]
+fn create_simple_ballot() {
+  let ExportedKeyPair {
+    public: pk,
+    private: _sk,
+  } = generate_elgamal_keypair().expect("failed to generate keypair");
+
+  let _vote0 = encrypt_vote(Buffer::from(pk.as_ref()), 0, 10).expect("failed to encrypt vote 0");
+
+  println!("{:?}", _vote0.to_vec());
+}
+
+#[test]
 fn test_ballot_flow() {
   let ExportedKeyPair {
     public: pk,
@@ -14,8 +26,8 @@ fn test_ballot_flow() {
   } = generate_elgamal_keypair().expect("failed to generate keypair");
 
   // 3 candidates
-  let candidate_count = U256::from(3);
-  let options_count = 3;
+  let candidate_count = U256::from(10);
+  let options_count = 10;
 
   // Initialize Accumulator
   let encoded_count = candidate_count.abi_encode();

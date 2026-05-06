@@ -120,17 +120,17 @@ pub fn add_votes(data: &Vec<u8>) -> Vec<u8> {
 ///
 /// # Arguments
 ///
-/// * `data` - ABI encoded sequence of `(public_key_pem, signature, msg)`.
+/// * `data` - ABI encoded sequence of `(public_key_pem, msg, signature)`.
 ///
 /// # Returns
 ///
 /// Returns a 32-byte vector where the last byte is 1 if valid, 0 otherwise.
 pub fn verify(data: &Vec<u8>) -> Vec<u8> {
-    let (public_key_pem, signature, msg) =
-        <(String, Bytes, Bytes)>::abi_decode_sequence(&data).unwrap();
+    let (public_key_der, msg, signature) =
+        <(Bytes, Bytes, Bytes)>::abi_decode_sequence(&data).unwrap();
 
     let public_key =
-        blind_rsa_signatures::PublicKey::<Sha384, PSS, Deterministic>::from_pem(&public_key_pem)
+        blind_rsa_signatures::PublicKey::<Sha384, PSS, Deterministic>::from_der(&public_key_der)
             .unwrap();
 
     let (signature_raw, msg_randomizer) = from_bytes::<(Vec<u8>, [u8; 32])>(&signature).unwrap();
