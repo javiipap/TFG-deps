@@ -125,14 +125,15 @@ where
     )
 }
 
-// --- Benchmark ---
+// --- Cached setup: encryption + homomorphic addition ---
 
-struct RunResult {
-    decryption: PhaseMeasurement,
-    correct: bool,
+struct CachedSetup {
+    sk: Vec<u8>,
+    acc: Vec<u8>,
+    expected: Vec<u64>,
 }
 
-fn run_benchmark(ballots: usize, candidates: usize, seed: u64) -> RunResult {
+fn build_cached_setup(ballots: usize, candidates: usize, seed: u64) -> CachedSetup {
     let (pk, sk) = generate_elgamal_keypair();
     let encoded_count = U256::from(candidates).abi_encode();
     let mut acc = generate_acc(&encoded_count);
@@ -147,13 +148,12 @@ fn run_benchmark(ballots: usize, candidates: usize, seed: u64) -> RunResult {
         })
         .collect();
 
-    // Phase 1: Encryption
-    let encrypted = votes
+    let encrypted: Vec<Vec<u8>> = votes
         .iter()
         .map(|&c| encrypt_vote(&pk, c, candidates).expect("encrypt failed"))
-        .collect::<Vec<Vec<u8>>>();
+        .collect();
 
-    // Phase 3: Homomorphic addition
+    let step = (ballots / 10).max(1);
     for i in 0..ballots {
         let input = (
             Bytes::from(acc.clone()),
@@ -161,13 +161,26 @@ fn run_benchmark(ballots: usize, candidates: usize, seed: u64) -> RunResult {
         )
             .abi_encode_sequence();
         acc = add_votes(&input);
+        if (i + 1) % step == 0 {
+            println!("    accumulating: {}/{} ({:.0}%)", i + 1, ballots, (i + 1) as f64 / ballots as f64 * 100.0);
+        }
     }
 
-    // Phase 4: Decryption
-    let (tallies, decryption) =
-        measure(|| decrypt_result(&sk, &acc, ballots as u64).expect("decrypt failed"));
+    CachedSetup { sk, acc, expected }
+}
 
-    let correct = tallies.iter().zip(expected.iter()).all(|(a, b)| *a == *b);
+// --- Benchmark (decryption only) ---
+
+struct RunResult {
+    decryption: PhaseMeasurement,
+    correct: bool,
+}
+
+fn run_benchmark(setup: &CachedSetup, ballots: usize) -> RunResult {
+    let (tallies, decryption) =
+        measure(|| decrypt_result(&setup.sk, &setup.acc, ballots as u64).expect("decrypt failed"));
+
+    let correct = tallies.iter().zip(setup.expected.iter()).all(|(a, b)| *a == *b);
 
     RunResult {
         decryption,
@@ -261,11 +274,14 @@ fn main() {
                 ballots, candidates, config.runs
             );
 
+            // Cache encryption + addition once per configuration
+            println!("  building cached setup (encrypt + accumulate)...");
+            let setup = build_cached_setup(ballots, candidates, config.seed);
+
             let mut results: Vec<RunResult> = Vec::with_capacity(config.runs);
             for run in 0..config.runs {
-                let seed = config.seed.wrapping_add(run as u64);
                 println!("  run {}/{}", run + 1, config.runs);
-                let r = run_benchmark(ballots, candidates, seed);
+                let r = run_benchmark(&setup, ballots);
                 if !r.correct {
                     eprintln!("  WARNING: tally mismatch on run {}", run + 1);
                 }
@@ -274,6 +290,7 @@ fn main() {
 
             dump_set_to_temp(&tmp_path, ballots, candidates, config.runs, &results);
             drop(results);
+            drop(setup);
         }
     }
 
