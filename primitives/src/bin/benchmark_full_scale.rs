@@ -3,9 +3,9 @@ use alloy_sol_types::SolValue;
 use primitives::ballots::{
     add_votes, decrypt_result, encrypt_vote, generate_acc, generate_elgamal_keypair, verify_vote,
 };
-use rand_legacy::rngs::StdRng;
 use rand_legacy::Rng;
 use rand_legacy::SeedableRng;
+use rand_legacy::rngs::StdRng;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::time::Instant;
@@ -26,7 +26,7 @@ impl Default for Config {
             ballots: vec![100, 500, 1000, 2000],
             candidates: vec![3, 5, 10],
             runs: 5,
-            output: "benchmark_results.csv".into(),
+            output: "benchmark_full_scale__results.csv".into(),
             seed: 42,
         }
     }
@@ -186,9 +186,8 @@ fn run_benchmark(ballots: usize, candidates: usize, zkp_enabled: bool, seed: u64
     });
 
     // Phase 4: Decryption
-    let (tallies, decryption) = measure(|| {
-        decrypt_result(&sk, &acc, ballots as u64).expect("decrypt failed")
-    });
+    let (tallies, decryption) =
+        measure(|| decrypt_result(&sk, &acc, ballots as u64).expect("decrypt failed"));
 
     let correct = tallies.iter().zip(expected.iter()).all(|(a, b)| *a == *b);
 
@@ -212,18 +211,9 @@ fn stddev(values: &[f64]) -> f64 {
     (values.iter().map(|v| (v - m).powi(2)).sum::<f64>() / values.len() as f64).sqrt()
 }
 
-// --- CSV output ---
+// --- Temp dump helpers ---
 
-fn write_csv_header(file: &mut fs::File) {
-    writeln!(
-        file,
-        "ballots,candidates,zkp_enabled,phase,runs,mean_wall_s,stddev_wall_s,mean_cpu_user_s,stddev_cpu_user_s,mean_rss_delta_kb,stddev_rss_delta_kb"
-    )
-    .expect("failed to write header");
-    file.flush().expect("failed to flush");
-}
-
-fn write_csv_row(
+fn write_stat_line(
     file: &mut fs::File,
     ballots: usize,
     candidates: usize,
@@ -252,21 +242,72 @@ fn write_csv_row(
     );
     println!("  {}", line);
     writeln!(file, "{}", line).expect("failed to write row");
+}
+
+fn dump_set_to_temp(
+    tmp_path: &str,
+    ballots: usize,
+    candidates: usize,
+    zkp_enabled: bool,
+    runs: usize,
+    results: &[RunResult],
+) {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(tmp_path)
+        .expect("failed to open temp file");
+
+    let phases: Vec<(&str, Vec<&PhaseMeasurement>)> = vec![
+        ("encryption", results.iter().map(|r| &r.encryption).collect()),
+        ("addition", results.iter().map(|r| &r.addition).collect()),
+        ("decryption", results.iter().map(|r| &r.decryption).collect()),
+    ];
+
+    for (phase, measurements) in &phases {
+        write_stat_line(&mut file, ballots, candidates, zkp_enabled, phase, runs, measurements);
+    }
+
+    if zkp_enabled {
+        let zkp_measurements: Vec<&PhaseMeasurement> =
+            results.iter().filter_map(|r| r.zkp.as_ref()).collect();
+        write_stat_line(
+            &mut file, ballots, candidates, zkp_enabled, "zkp_verification", runs, &zkp_measurements,
+        );
+    }
+
     file.flush().expect("failed to flush");
+}
+
+fn aggregate_temp_to_output(tmp_path: &str, output_path: &str) {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(output_path)
+        .expect("failed to open output file");
+
+    writeln!(
+        file,
+        "ballots,candidates,zkp_enabled,phase,runs,mean_wall_s,stddev_wall_s,mean_cpu_user_s,stddev_cpu_user_s,mean_rss_delta_kb,stddev_rss_delta_kb"
+    )
+    .expect("failed to write header");
+
+    let data = fs::read_to_string(tmp_path).expect("failed to read temp file");
+    write!(file, "{}", data).expect("failed to write data");
+    file.flush().expect("failed to flush");
+
+    let _ = fs::remove_file(tmp_path);
 }
 
 // --- Main ---
 
 fn main() {
     let config = parse_args();
+    let tmp_path = format!("{}.tmp", config.output);
 
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&config.output)
-        .expect("failed to open output file");
-    write_csv_header(&mut file);
+    // Clear any leftover temp file
+    let _ = fs::remove_file(&tmp_path);
 
     for &ballots in &config.ballots {
         for &candidates in &config.candidates {
@@ -287,42 +328,12 @@ fn main() {
                     results.push(r);
                 }
 
-                // Write stats per phase
-                let phases: Vec<(&str, Vec<&PhaseMeasurement>)> = vec![
-                    ("encryption", results.iter().map(|r| &r.encryption).collect()),
-                    ("addition", results.iter().map(|r| &r.addition).collect()),
-                    ("decryption", results.iter().map(|r| &r.decryption).collect()),
-                ];
-
-                for (phase, measurements) in &phases {
-                    write_csv_row(
-                        &mut file,
-                        ballots,
-                        candidates,
-                        zkp_enabled,
-                        phase,
-                        config.runs,
-                        measurements,
-                    );
-                }
-
-                // ZKP phase only when enabled
-                if zkp_enabled {
-                    let zkp_measurements: Vec<&PhaseMeasurement> =
-                        results.iter().filter_map(|r| r.zkp.as_ref()).collect();
-                    write_csv_row(
-                        &mut file,
-                        ballots,
-                        candidates,
-                        zkp_enabled,
-                        "zkp_verification",
-                        config.runs,
-                        &zkp_measurements,
-                    );
-                }
+                dump_set_to_temp(&tmp_path, ballots, candidates, zkp_enabled, config.runs, &results);
+                drop(results);
             }
         }
     }
 
+    aggregate_temp_to_output(&tmp_path, &config.output);
     println!("\nResults written to {}", config.output);
 }

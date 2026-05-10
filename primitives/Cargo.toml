@@ -4,8 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "benchmark"
-path = "src/bin/benchmark.rs"
+name = "benchmark_full-scale"
+path = "src/bin/benchmark_full_scale.rs"
+
+[[bin]]
+name = "benchmark_unit"
+path = "src/bin/benchmark_unit.rs"
+
+[[bin]]
+name = "benchmark_tally"
+path = "src/bin/benchmark_tally.rs"
 
 [dependencies]
 alloy-primitives = "1.5.3"
