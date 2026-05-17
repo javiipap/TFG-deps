@@ -6,7 +6,7 @@ use rand_legacy::SeedableRng;
 use rand_legacy::rngs::StdRng;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::mem::size_of_val;
+use std::mem::size_of;
 use std::time::Instant;
 
 // --- Config ---
@@ -17,6 +17,7 @@ struct Config {
     runs: usize,
     output: String,
     seed: u64,
+    dlt_only: bool,
 }
 
 impl Default for Config {
@@ -27,6 +28,7 @@ impl Default for Config {
             runs: 10,
             output: "benchmark_tally__results.csv".into(),
             seed: 42,
+            dlt_only: true,
         }
     }
 }
@@ -62,6 +64,9 @@ fn parse_args() -> Config {
             "--seed" => {
                 i += 1;
                 config.seed = args[i].parse().expect("invalid seed");
+            }
+            "--dlt-only" => {
+                config.dlt_only = true;
             }
             other => panic!("Unknown argument: {}", other),
         }
@@ -149,18 +154,38 @@ fn build_cached_setup(_ballots: usize, candidates: usize, seed: u64) -> CachedSe
 // --- Benchmark (decryption only) ---
 
 struct DltSize {
-    shallow_bytes: usize,
+    estimated_heap_bytes: usize,
     rss_delta_kb: i64,
+}
+
+fn estimate_dlt_heap_bytes(entries: usize) -> usize {
+    // DiscreteLogTable<Ristretto> uses HashMap<Vec<u8>, u64>
+    // Key: Vec<u8> of 32 bytes (Ristretto point) → 24 (Vec header) + 32 (heap data) = 56
+    // Value: u64 = 8 bytes
+    // HashMap overhead per entry: ~1 byte control + padding ≈ bucket size aligned
+    // Each bucket stores (key, value) = (56 + 8) = 64 bytes + 1 byte control
+    // HashMap allocates capacity as power of 2 with ~87.5% load factor
+    let capacity = (entries as f64 / 0.875).ceil() as usize;
+    let capacity = capacity.next_power_of_two();
+    // Per bucket: 1 byte control metadata
+    // Per occupied entry: Vec heap (32) + Vec stack-in-bucket (24 + 8 = 32 for key+value pair)
+    // Actual layout: control bytes (capacity) + entries * size_of::<(Vec<u8>, u64)>()
+    let control_bytes = capacity;
+    let entry_size = size_of::<(Vec<u8>, u64)>(); // 32 bytes typically
+    let bucket_array = control_bytes + capacity * entry_size;
+    let vec_heap_allocs = entries * 32; // each Vec<u8> has 32 bytes on heap
+    bucket_array + vec_heap_allocs
 }
 
 fn measure_dlt_size(ballots: usize) -> DltSize {
     let rss_before = get_rss_kb();
     let table = DiscreteLogTable::<Ristretto>::new(0..=(ballots as u64));
     let rss_after = get_rss_kb();
-    let shallow = size_of_val(&table);
+    let entries = ballots; // 0 is handled specially, so entries = ballots (1..=ballots)
+    let estimated = estimate_dlt_heap_bytes(entries);
     drop(table);
     DltSize {
-        shallow_bytes: shallow,
+        estimated_heap_bytes: estimated,
         rss_delta_kb: rss_after as i64 - rss_before as i64,
     }
 }
@@ -229,7 +254,7 @@ fn dump_set_to_temp(
         stddev(&cpus),
         mean(&rsss),
         stddev(&rsss),
-        dlt_size.shallow_bytes,
+        dlt_size.estimated_heap_bytes,
         dlt_size.rss_delta_kb,
     );
     println!("  {}", line);
@@ -247,7 +272,7 @@ fn aggregate_temp_to_output(tmp_path: &str, output_path: &str) {
 
     writeln!(
         file,
-        "ballots,candidates,phase,runs,mean_wall_s,stddev_wall_s,mean_cpu_user_s,stddev_cpu_user_s,mean_rss_delta_kb,stddev_rss_delta_kb,dlt_shallow_bytes,dlt_rss_delta_kb"
+        "ballots,candidates,phase,runs,mean_wall_s,stddev_wall_s,mean_cpu_user_s,stddev_cpu_user_s,mean_rss_delta_kb,stddev_rss_delta_kb,dlt_estimated_heap_bytes,dlt_rss_delta_kb"
     )
     .expect("failed to write header");
 
@@ -274,10 +299,6 @@ fn main() {
                 ballots, candidates, config.runs
             );
 
-            // Cache encryption + addition once per configuration
-            println!("  building cached setup (encrypt + accumulate)...");
-            let setup = build_cached_setup(ballots, candidates, config.seed);
-
             // Measure DiscreteLogTable size
             println!(
                 "  measuring DiscreteLogTable size (entries: {})...",
@@ -285,9 +306,17 @@ fn main() {
             );
             let dlt_size = measure_dlt_size(ballots);
             println!(
-                "    shallow: {} bytes, rss_delta: {} kB",
-                dlt_size.shallow_bytes, dlt_size.rss_delta_kb
+                "    estimated_heap: {} bytes, rss_delta: {} kB",
+                dlt_size.estimated_heap_bytes, dlt_size.rss_delta_kb
             );
+
+            if config.dlt_only {
+                continue;
+            }
+
+            // Cache encryption + addition once per configuration
+            println!("  building cached setup (encrypt + accumulate)...");
+            let setup = build_cached_setup(ballots, candidates, config.seed);
 
             let mut results: Vec<RunResult> = Vec::with_capacity(config.runs);
             for run in 0..config.runs {
@@ -312,6 +341,8 @@ fn main() {
         }
     }
 
-    aggregate_temp_to_output(&tmp_path, &config.output);
-    println!("\nResults written to {}", config.output);
+    if !config.dlt_only {
+        aggregate_temp_to_output(&tmp_path, &config.output);
+        println!("\nResults written to {}", config.output);
+    }
 }
