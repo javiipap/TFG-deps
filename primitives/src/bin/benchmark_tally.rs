@@ -1,11 +1,7 @@
-use alloy_primitives::{Bytes, U256};
-use alloy_sol_types::SolValue;
 use elastic_elgamal::group::Ristretto;
-use elastic_elgamal::DiscreteLogTable;
-use primitives::ballots::{
-    add_votes, decrypt_result, encrypt_vote, generate_acc, generate_elgamal_keypair,
-};
-use rand_legacy::Rng;
+use elastic_elgamal::{Ciphertext, DiscreteLogTable, Keypair};
+use postcard::to_allocvec;
+use primitives::ballots::decrypt_result;
 use rand_legacy::SeedableRng;
 use rand_legacy::rngs::StdRng;
 use std::fs::{self, OpenOptions};
@@ -26,9 +22,9 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            ballots: vec![10],
+            ballots: vec![10_000, 100_000, 1_000_000, 10_000_000, 40_000_000],
             candidates: vec![10],
-            runs: 1,
+            runs: 10,
             output: "benchmark_tally__results.csv".into(),
             seed: 42,
         }
@@ -136,39 +132,16 @@ struct CachedSetup {
     expected: Vec<u64>,
 }
 
-fn build_cached_setup(ballots: usize, candidates: usize, seed: u64) -> CachedSetup {
-    let (pk, sk) = generate_elgamal_keypair();
-    let encoded_count = U256::from(candidates).abi_encode();
-    let mut acc = generate_acc(&encoded_count);
+fn build_cached_setup(_ballots: usize, candidates: usize, seed: u64) -> CachedSetup {
     let mut rng = StdRng::seed_from_u64(seed);
-    let mut expected = vec![0u64; candidates];
+    let keypair = Keypair::<Ristretto>::generate(&mut rng);
+    let pk = keypair.public();
+    let sk = Vec::from(keypair.secret().expose_scalar().as_bytes());
 
-    let votes: Vec<usize> = (0..50).map(|_| rng.gen_range(0..candidates)).collect();
-
-    let encrypted: Vec<Vec<u8>> = votes
-        .iter()
-        .map(|&c| encrypt_vote(&pk, c, candidates).expect("encrypt failed"))
-        .collect();
-
-    let step = (ballots / 10).max(1);
-    for i in 0..ballots {
-        let vote_idx = i % encrypted.len();
-        expected[votes[vote_idx]] += 1;
-        let input = (
-            Bytes::from(acc.clone()),
-            Bytes::from(encrypted[vote_idx].clone()),
-        )
-            .abi_encode_sequence();
-        acc = add_votes(&input);
-        if (i + 1) % step == 0 {
-            println!(
-                "    accumulating: {}/{} ({:.0}%)",
-                i + 1,
-                ballots,
-                (i + 1) as f64 / ballots as f64 * 100.0
-            );
-        }
-    }
+    let expected: Vec<u64> = (0..candidates).map(|i| i as u64).collect();
+    let acc_vec: Vec<Ciphertext<Ristretto>> =
+        expected.iter().map(|&v| pk.encrypt(v, &mut rng)).collect();
+    let acc = to_allocvec(&acc_vec).unwrap();
 
     CachedSetup { sk, acc, expected }
 }
@@ -306,9 +279,15 @@ fn main() {
             let setup = build_cached_setup(ballots, candidates, config.seed);
 
             // Measure DiscreteLogTable size
-            println!("  measuring DiscreteLogTable size (entries: {})...", ballots + 1);
+            println!(
+                "  measuring DiscreteLogTable size (entries: {})...",
+                ballots + 1
+            );
             let dlt_size = measure_dlt_size(ballots);
-            println!("    shallow: {} bytes, rss_delta: {} kB", dlt_size.shallow_bytes, dlt_size.rss_delta_kb);
+            println!(
+                "    shallow: {} bytes, rss_delta: {} kB",
+                dlt_size.shallow_bytes, dlt_size.rss_delta_kb
+            );
 
             let mut results: Vec<RunResult> = Vec::with_capacity(config.runs);
             for run in 0..config.runs {
@@ -320,7 +299,14 @@ fn main() {
                 results.push(r);
             }
 
-            dump_set_to_temp(&tmp_path, ballots, candidates, config.runs, &results, &dlt_size);
+            dump_set_to_temp(
+                &tmp_path,
+                ballots,
+                candidates,
+                config.runs,
+                &results,
+                &dlt_size,
+            );
             drop(results);
             drop(setup);
         }
