@@ -1,5 +1,7 @@
 use alloy_primitives::{Bytes, U256};
 use alloy_sol_types::SolValue;
+use elastic_elgamal::group::Ristretto;
+use elastic_elgamal::DiscreteLogTable;
 use primitives::ballots::{
     add_votes, decrypt_result, encrypt_vote, generate_acc, generate_elgamal_keypair,
 };
@@ -8,6 +10,7 @@ use rand_legacy::SeedableRng;
 use rand_legacy::rngs::StdRng;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::mem::size_of_val;
 use std::time::Instant;
 
 // --- Config ---
@@ -23,9 +26,9 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            ballots: vec![10_000_000, 1_000_000, 100_000, 10_000],
+            ballots: vec![10],
             candidates: vec![10],
-            runs: 100,
+            runs: 1,
             output: "benchmark_tally__results.csv".into(),
             seed: 42,
         }
@@ -140,13 +143,7 @@ fn build_cached_setup(ballots: usize, candidates: usize, seed: u64) -> CachedSet
     let mut rng = StdRng::seed_from_u64(seed);
     let mut expected = vec![0u64; candidates];
 
-    let votes: Vec<usize> = (0..50)
-        .map(|_| {
-            let c = rng.gen_range(0..candidates);
-            expected[c] += 1;
-            c
-        })
-        .collect();
+    let votes: Vec<usize> = (0..50).map(|_| rng.gen_range(0..candidates)).collect();
 
     let encrypted: Vec<Vec<u8>> = votes
         .iter()
@@ -155,14 +152,21 @@ fn build_cached_setup(ballots: usize, candidates: usize, seed: u64) -> CachedSet
 
     let step = (ballots / 10).max(1);
     for i in 0..ballots {
+        let vote_idx = i % encrypted.len();
+        expected[votes[vote_idx]] += 1;
         let input = (
             Bytes::from(acc.clone()),
-            Bytes::from(encrypted[i % encrypted.len()].clone()),
+            Bytes::from(encrypted[vote_idx].clone()),
         )
             .abi_encode_sequence();
         acc = add_votes(&input);
         if (i + 1) % step == 0 {
-            println!("    accumulating: {}/{} ({:.0}%)", i + 1, ballots, (i + 1) as f64 / ballots as f64 * 100.0);
+            println!(
+                "    accumulating: {}/{} ({:.0}%)",
+                i + 1,
+                ballots,
+                (i + 1) as f64 / ballots as f64 * 100.0
+            );
         }
     }
 
@@ -170,6 +174,23 @@ fn build_cached_setup(ballots: usize, candidates: usize, seed: u64) -> CachedSet
 }
 
 // --- Benchmark (decryption only) ---
+
+struct DltSize {
+    shallow_bytes: usize,
+    rss_delta_kb: i64,
+}
+
+fn measure_dlt_size(ballots: usize) -> DltSize {
+    let rss_before = get_rss_kb();
+    let table = DiscreteLogTable::<Ristretto>::new(0..=(ballots as u64));
+    let rss_after = get_rss_kb();
+    let shallow = size_of_val(&table);
+    drop(table);
+    DltSize {
+        shallow_bytes: shallow,
+        rss_delta_kb: rss_after as i64 - rss_before as i64,
+    }
+}
 
 struct RunResult {
     decryption: PhaseMeasurement,
@@ -180,7 +201,10 @@ fn run_benchmark(setup: &CachedSetup, ballots: usize) -> RunResult {
     let (tallies, decryption) =
         measure(|| decrypt_result(&setup.sk, &setup.acc, ballots as u64).expect("decrypt failed"));
 
-    let correct = tallies.iter().zip(setup.expected.iter()).all(|(a, b)| *a == *b);
+    let correct = tallies
+        .iter()
+        .zip(setup.expected.iter())
+        .all(|(a, b)| *a == *b);
 
     RunResult {
         decryption,
@@ -207,6 +231,7 @@ fn dump_set_to_temp(
     candidates: usize,
     runs: usize,
     results: &[RunResult],
+    dlt_size: &DltSize,
 ) {
     let mut file = OpenOptions::new()
         .create(true)
@@ -220,7 +245,7 @@ fn dump_set_to_temp(
     let rsss: Vec<f64> = measurements.iter().map(|m| m.rss_delta_kb as f64).collect();
 
     let line = format!(
-        "{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.1},{:.1}",
+        "{},{},{},{},{:.6},{:.6},{:.6},{:.6},{:.1},{:.1},{},{}",
         ballots,
         candidates,
         "decryption",
@@ -231,6 +256,8 @@ fn dump_set_to_temp(
         stddev(&cpus),
         mean(&rsss),
         stddev(&rsss),
+        dlt_size.shallow_bytes,
+        dlt_size.rss_delta_kb,
     );
     println!("  {}", line);
     writeln!(file, "{}", line).expect("failed to write row");
@@ -247,7 +274,7 @@ fn aggregate_temp_to_output(tmp_path: &str, output_path: &str) {
 
     writeln!(
         file,
-        "ballots,candidates,phase,runs,mean_wall_s,stddev_wall_s,mean_cpu_user_s,stddev_cpu_user_s,mean_rss_delta_kb,stddev_rss_delta_kb"
+        "ballots,candidates,phase,runs,mean_wall_s,stddev_wall_s,mean_cpu_user_s,stddev_cpu_user_s,mean_rss_delta_kb,stddev_rss_delta_kb,dlt_shallow_bytes,dlt_rss_delta_kb"
     )
     .expect("failed to write header");
 
@@ -278,6 +305,11 @@ fn main() {
             println!("  building cached setup (encrypt + accumulate)...");
             let setup = build_cached_setup(ballots, candidates, config.seed);
 
+            // Measure DiscreteLogTable size
+            println!("  measuring DiscreteLogTable size (entries: {})...", ballots + 1);
+            let dlt_size = measure_dlt_size(ballots);
+            println!("    shallow: {} bytes, rss_delta: {} kB", dlt_size.shallow_bytes, dlt_size.rss_delta_kb);
+
             let mut results: Vec<RunResult> = Vec::with_capacity(config.runs);
             for run in 0..config.runs {
                 println!("  run {}/{}", run + 1, config.runs);
@@ -288,7 +320,7 @@ fn main() {
                 results.push(r);
             }
 
-            dump_set_to_temp(&tmp_path, ballots, candidates, config.runs, &results);
+            dump_set_to_temp(&tmp_path, ballots, candidates, config.runs, &results, &dlt_size);
             drop(results);
             drop(setup);
         }

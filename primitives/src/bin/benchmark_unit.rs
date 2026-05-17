@@ -1,5 +1,7 @@
 use alloy_primitives::{Bytes, U256};
 use alloy_sol_types::SolValue;
+use elastic_elgamal::group::Ristretto;
+use elastic_elgamal::PublicKey;
 use primitives::ballots::{
     add_votes, encrypt_vote, generate_acc, generate_elgamal_keypair, verify_vote,
 };
@@ -122,8 +124,9 @@ where
 // --- Benchmark ---
 
 struct RunResult {
-    encryption: PhaseMeasurement,
-    zkp: PhaseMeasurement,
+    raw_encryption: PhaseMeasurement,
+    proof_generation: PhaseMeasurement,
+    zkp_verification: PhaseMeasurement,
     addition: PhaseMeasurement,
 }
 
@@ -132,14 +135,25 @@ fn run_benchmark(candidates: usize, seed: u64) -> RunResult {
     let encoded_count = U256::from(candidates).abi_encode();
     let mut acc = generate_acc(&encoded_count);
     let mut rng = StdRng::seed_from_u64(seed);
+    let choice = rng.gen_range(0..candidates);
 
-    // Phase 1: Encryption
-    let (encrypted, encryption) = measure(|| {
-        encrypt_vote(&pk, rng.gen_range(0..candidates), candidates).expect("encrypt failed")
+    // Phase 1: Raw ElGamal encryption (no proof)
+    let (_, raw_encryption) = measure(|| {
+        let receiver = PublicKey::<Ristretto>::from_bytes(&pk).unwrap();
+        let mut enc_rng = StdRng::seed_from_u64(seed);
+        for i in 0..candidates {
+            let val = if i == choice { 1_u64 } else { 0_u64 };
+            receiver.encrypt(val, &mut enc_rng);
+        }
     });
 
-    // Phase 2: ZKP verification (optional)
-    let (_, zkp) = measure(|| {
+    // Phase 2: Full ballot creation (encryption + ZKP proof generation)
+    let (encrypted, proof_generation) = measure(|| {
+        encrypt_vote(&pk, choice, candidates).expect("encrypt failed")
+    });
+
+    // Phase 3: ZKP verification
+    let (_, zkp_verification) = measure(|| {
         let input = (
             U256::from(candidates),
             Bytes::from(pk.clone()),
@@ -149,7 +163,7 @@ fn run_benchmark(candidates: usize, seed: u64) -> RunResult {
         verify_vote(&input);
     });
 
-    // Phase 3: Homomorphic addition
+    // Phase 4: Homomorphic addition
     let (_, addition) = measure(|| {
         let input =
             (Bytes::from(acc.clone()), Bytes::from(encrypted.clone())).abi_encode_sequence();
@@ -157,8 +171,9 @@ fn run_benchmark(candidates: usize, seed: u64) -> RunResult {
     });
 
     RunResult {
-        encryption,
-        zkp,
+        raw_encryption,
+        proof_generation,
+        zkp_verification,
         addition,
     }
 }
@@ -189,9 +204,10 @@ fn dump_set_to_temp(
         .expect("failed to open temp file");
 
     let phases: Vec<(&str, Vec<&PhaseMeasurement>)> = vec![
-        ("encryption", results.iter().map(|r| &r.encryption).collect()),
+        ("raw_encryption", results.iter().map(|r| &r.raw_encryption).collect()),
+        ("proof_generation", results.iter().map(|r| &r.proof_generation).collect()),
+        ("zkp_verification", results.iter().map(|r| &r.zkp_verification).collect()),
         ("addition", results.iter().map(|r| &r.addition).collect()),
-        ("zkp_verification", results.iter().map(|r| &r.zkp).collect()),
     ];
 
     for (phase, measurements) in &phases {

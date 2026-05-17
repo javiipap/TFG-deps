@@ -15,6 +15,10 @@ path = "src/bin/benchmark_unit.rs"
 name = "benchmark_tally"
 path = "src/bin/benchmark_tally.rs"
 
+[[bin]]
+name = "benchmark_bfv"
+path = "src/bin/benchmark_bfv.rs"
+
 [dependencies]
 alloy-primitives = "1.5.3"
 alloy-sol-types = "1.5.3"
@@ -26,6 +30,7 @@ rsa = { version = "0.9.10", features = ["sha2"]}
 sharks = "0.5.0"
 heapless = "0.9.2"
 rand_legacy = { package = "rand", version = "0.8.3" }
+cupcake = { package = "Cupcake", version = "0.2.1" }
 getrandom = { version = "0.4.0-rc.1", default-features=false, features = ["wasm_js"] }
 critical-section = { version = "1.1", features = ["std"] }
 
