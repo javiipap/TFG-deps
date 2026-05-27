@@ -1,4 +1,6 @@
-use cupcake::traits::{AdditiveHomomorphicScheme, KeyGeneration, PKEncryption, SKEncryption, Serializable};
+use cupcake::traits::{
+    AdditiveHomomorphicScheme, KeyGeneration, PKEncryption, SKEncryption, Serializable,
+};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::time::Instant;
@@ -13,7 +15,7 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            runs: 100,
+            runs: 1,
             output: "benchmark_bfv__results.csv".into(),
         }
     }
@@ -122,6 +124,8 @@ fn run_benchmark(scheme: &cupcake::DefaultShemeType) -> RunResult {
 
     let ciphertext_bytes = ct.to_bytes().len();
 
+    println!("{} {}", ct.0.coeffs.len(), ciphertext_bytes);
+
     let (_, decryption) = measure(|| {
         let _: Vec<u8> = scheme.decrypt(&ct, &sk);
     });
@@ -146,7 +150,10 @@ fn main() {
     let config = parse_args();
     let scheme = cupcake::default();
 
-    println!("=== BFV Benchmark (n={}, {} runs) ===", scheme.n, config.runs);
+    println!(
+        "=== BFV Benchmark (n={}, {} runs) ===",
+        scheme.n, config.runs
+    );
 
     let mut results: Vec<RunResult> = Vec::with_capacity(config.runs);
     for run in 0..config.runs {
@@ -169,8 +176,14 @@ fn main() {
     .unwrap();
 
     let phases: Vec<(&str, Vec<&PhaseMeasurement>)> = vec![
-        ("encryption", results.iter().map(|r| &r.encryption).collect()),
-        ("decryption", results.iter().map(|r| &r.decryption).collect()),
+        (
+            "encryption",
+            results.iter().map(|r| &r.encryption).collect(),
+        ),
+        (
+            "decryption",
+            results.iter().map(|r| &r.decryption).collect(),
+        ),
         ("addition", results.iter().map(|r| &r.addition).collect()),
     ];
 

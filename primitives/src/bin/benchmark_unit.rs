@@ -5,6 +5,7 @@ use elastic_elgamal::PublicKey;
 use primitives::ballots::{
     add_votes, encrypt_vote, generate_acc, generate_elgamal_keypair, verify_vote,
 };
+use primitives::blind_signatures;
 use rand_legacy::Rng;
 use rand_legacy::SeedableRng;
 use rand_legacy::rngs::StdRng;
@@ -98,6 +99,7 @@ struct PhaseMeasurement {
     wall_secs: f64,
     cpu_user_secs: f64,
     rss_delta_kb: i64,
+    size_bytes: usize,
 }
 
 fn measure<F, T>(f: F) -> (T, PhaseMeasurement)
@@ -117,6 +119,7 @@ where
             wall_secs: elapsed.as_secs_f64(),
             cpu_user_secs: cpu_after.0 - cpu_before.0,
             rss_delta_kb: rss_after as i64 - rss_before as i64,
+            size_bytes: 0,
         },
     )
 }
@@ -128,6 +131,10 @@ struct RunResult {
     proof_generation: PhaseMeasurement,
     zkp_verification: PhaseMeasurement,
     addition: PhaseMeasurement,
+    blind_sign_request: PhaseMeasurement,
+    blind_sign: PhaseMeasurement,
+    blind_unblind: PhaseMeasurement,
+    blind_verify: PhaseMeasurement,
 }
 
 fn run_benchmark(candidates: usize, seed: u64) -> RunResult {
@@ -170,11 +177,52 @@ fn run_benchmark(candidates: usize, seed: u64) -> RunResult {
         acc = add_votes(&input);
     });
 
+    // Phase 5: Blind signature request (blinding)
+    let rsa_kp = blind_signatures::generate_rsa_keypair().expect("rsa keygen failed");
+    let msg = encrypted.clone();
+    let (blind_msg, secret) = {
+        let (_, blind_sign_request_tmp) = measure(|| {
+            blind_signatures::create_request(&rsa_kp.public, &msg).expect("blind request failed")
+        });
+        let (bm, sec) =
+            blind_signatures::create_request(&rsa_kp.public, &msg).expect("blind request failed");
+        // Re-measure cleanly
+        drop(blind_sign_request_tmp);
+        (bm, sec)
+    };
+    let (_, mut blind_sign_request) = measure(|| {
+        blind_signatures::create_request(&rsa_kp.public, &msg).expect("blind request failed");
+    });
+    blind_sign_request.size_bytes = blind_msg.len();
+
+    // Phase 6: Blind signing
+    let ((blind_sig,), mut blind_sign) = measure(|| {
+        (blind_signatures::sign(&rsa_kp.private, &blind_msg).expect("blind sign failed"),)
+    });
+    blind_sign.size_bytes = blind_sig.len();
+
+    // Phase 7: Unblinding
+    let ((signature,), mut blind_unblind) = measure(|| {
+        (blind_signatures::unblind(&rsa_kp.public, &msg, secret.clone(), blind_sig.clone())
+            .expect("unblind failed"),)
+    });
+    blind_unblind.size_bytes = signature.len();
+
+    // Phase 8: Blind signature verification
+    let (_, blind_verify) = measure(|| {
+        blind_signatures::verify(&rsa_kp.public, signature.clone(), &msg)
+            .expect("verify failed");
+    });
+
     RunResult {
         raw_encryption,
         proof_generation,
         zkp_verification,
         addition,
+        blind_sign_request,
+        blind_sign,
+        blind_unblind,
+        blind_verify,
     }
 }
 
@@ -208,15 +256,20 @@ fn dump_set_to_temp(
         ("proof_generation", results.iter().map(|r| &r.proof_generation).collect()),
         ("zkp_verification", results.iter().map(|r| &r.zkp_verification).collect()),
         ("addition", results.iter().map(|r| &r.addition).collect()),
+        ("blind_sign_request", results.iter().map(|r| &r.blind_sign_request).collect()),
+        ("blind_sign", results.iter().map(|r| &r.blind_sign).collect()),
+        ("blind_unblind", results.iter().map(|r| &r.blind_unblind).collect()),
+        ("blind_verify", results.iter().map(|r| &r.blind_verify).collect()),
     ];
 
     for (phase, measurements) in &phases {
         let walls: Vec<f64> = measurements.iter().map(|m| m.wall_secs).collect();
         let cpus: Vec<f64> = measurements.iter().map(|m| m.cpu_user_secs).collect();
         let rsss: Vec<f64> = measurements.iter().map(|m| m.rss_delta_kb as f64).collect();
+        let sizes: Vec<f64> = measurements.iter().map(|m| m.size_bytes as f64).collect();
 
         let line = format!(
-            "{},{},{},{:.6},{:.6},{:.6},{:.6},{:.1},{:.1}",
+            "{},{},{},{:.6},{:.6},{:.6},{:.6},{:.1},{:.1},{:.0}",
             candidates,
             phase,
             runs,
@@ -226,6 +279,7 @@ fn dump_set_to_temp(
             stddev(&cpus),
             mean(&rsss),
             stddev(&rsss),
+            mean(&sizes),
         );
         println!("  {}", line);
         writeln!(file, "{}", line).expect("failed to write row");
@@ -243,7 +297,7 @@ fn aggregate_temp_to_output(tmp_path: &str, output_path: &str) {
 
     writeln!(
         file,
-        "candidates,phase,runs,mean_wall_s,stddev_wall_s,mean_cpu_user_s,stddev_cpu_user_s,mean_rss_delta_kb,stddev_rss_delta_kb"
+        "candidates,phase,runs,mean_wall_s,stddev_wall_s,mean_cpu_user_s,stddev_cpu_user_s,mean_rss_delta_kb,stddev_rss_delta_kb,size_bytes"
     )
     .expect("failed to write header");
 
