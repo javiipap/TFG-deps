@@ -1,9 +1,0 @@
-test_stress_zero_votes | decryption | wall=0.042s | cpu_user=0.160s cpu_sys=0.000s | rss_before=1220KB rss_after=1220KB rss_delta=0KB | 3 candidates, max_count=0
-test_stress_single_candidate | encryption | wall=344.374s | cpu_user=1363.670s cpu_sys=0.810s | rss_before=1220KB rss_after=7304KB rss_delta=6084KB | 2000 votes, 3 candidates
-test_stress_single_candidate | addition | wall=0.859s | cpu_user=3.440s cpu_sys=0.000s | rss_before=7304KB rss_after=7304KB rss_delta=0KB | 2000 votes
-test_stress_single_candidate | decryption | wall=1.239s | cpu_user=4.960s cpu_sys=0.000s | rss_before=7304KB rss_after=7704KB rss_delta=400KB | 3 candidates, max_count=2000
-test_stress_distributed | encryption | wall=557.518s | cpu_user=2004.980s cpu_sys=0.980s | rss_before=1220KB rss_after=9740KB rss_delta=8520KB | 2000 votes, 5 candidates
-test_stress_random | encryption | wall=557.776s | cpu_user=2005.760s cpu_sys=0.980s | rss_before=1220KB rss_after=9740KB rss_delta=8520KB | 2000 votes, 5 candidates
-test_stress_distributed | addition | wall=1.473s | cpu_user=4.420s cpu_sys=0.000s | rss_before=9740KB rss_after=9740KB rss_delta=0KB | 2000 votes
-test_stress_random | addition | wall=1.601s | cpu_user=4.800s cpu_sys=0.000s | rss_before=9740KB rss_after=9740KB rss_delta=0KB | 2000 votes
-test_stress_distributed | decryption | wall=1.442s | cpu_user=4.320s cpu_sys=0.000s | rss_before=9740KB rss_after=10312KB rss_delta=572KB | 5 candidates, max_count=2000

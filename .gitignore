@@ -1,7 +1,35 @@
-target
-pkg
-venv
-*/out/*
-venv
+# Build artifacts
+target/
+**/node_modules/
+*.node
+pkg/
+
+# Cargo lock (library crates)
+**/Cargo.lock
+
+# Benchmark outputs
+*.bak
 *.csv
 *.png
+*.ipynb
+*_results.txt
+
+# Archives
+*.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# IDE
+.vscode/
+
+# Yarn
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
