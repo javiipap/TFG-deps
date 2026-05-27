@@ -1,3 +1,0 @@
----
-- name: Start kurtosis
-  shell: kurtosis run github.com/ethpandaops/ethereum-package --args-file ./network_params.yaml --image-download always

@@ -1,5 +1,0 @@
----
-- import_tasks: install.yaml
-- import_tasks: setup-admin.yaml
-- import_tasks: format-disk.yaml
-- import_tasks: restart.yaml

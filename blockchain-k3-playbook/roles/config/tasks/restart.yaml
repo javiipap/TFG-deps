@@ -1,4 +1,0 @@
----
-- name: Reboot machines
-  reboot:
-    reboot_timeout: 600
